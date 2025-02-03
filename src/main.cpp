@@ -9,8 +9,6 @@
 #define ACCEL_XOUT_H 0x3B
 #define GYRO_XOUT_H  0x43
 
-// teste
-
 // Função para inicializar o MPU9250
 void initMPU9250() {
     Wire.beginTransmission(MPU9250_ADDRESS);
