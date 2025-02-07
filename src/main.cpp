@@ -24,6 +24,7 @@
 #define MQ2_READY_BIT    (1 << 3)
 #define SONAR_READY_BIT  (1 << 4)
 
+// Protótipos da função
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void dhtTask(void *pvParameters);
 void irTask(void *pvParameters);
@@ -49,7 +50,7 @@ EventGroupHandle_t eventGroup;
 SensorData sharedData;
 
 // Endereço MAC do receptor ESP-NOW
-uint8_t receiverMac[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t receiverMac[] = {0x24, 0x62, 0xAB, 0xCA, 0x7B, 0x88};
 
 void setup() {
   Serial.begin(115200);
@@ -77,16 +78,15 @@ void setup() {
   eventGroup = xEventGroupCreate();
 
   // Criação de tasks
-  xTaskCreate(dhtTask, "DHT", 2048, NULL, 1, NULL);
-  xTaskCreate(irTask, "IR", 1024, NULL, 1, NULL);
-  xTaskCreate(ldrTask, "LDR", 1024, NULL, 1, NULL);
-  xTaskCreate(mq2Task, "MQ2", 1024, NULL, 1, NULL);
-  xTaskCreate(sonarTask, "Sonar", 2048, NULL, 1, NULL);
-  xTaskCreate(espnowTask, "ESP-NOW", 4096, NULL, 2, NULL);
+  xTaskCreatePinnedToCore(dhtTask, "DHT", 2048, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(irTask, "IR", 1024, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(ldrTask, "LDR", 1024, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(mq2Task, "MQ2", 1024, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(sonarTask, "Sonar", 2048, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(espnowTask, "ESP-NOW", 4096, NULL, 2, NULL, 1);
 }
 
 void loop() {
-  // Nada aqui - tudo é tratado pelas tasks
 }
 
 // Callback de envio ESP-NOW
