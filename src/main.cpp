@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <DHT.h>
+
+#include <esp_now.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -9,28 +11,25 @@
 #include <freertos/event_groups.h>
 
 // Definições de hardware
-#define DHT_PIN          4
-#define IR_PIN           5
+#define DHT_PIN          33
 #define LDR_PIN          34
 #define MQ2_PIN          35
-#define TRIG_PIN         18
-#define ECHO_PIN         19
+#define TRIG_PIN         22
+#define ECHO_PIN         23
 #define DHT_TYPE         DHT11
 
 // Event Group bits
 #define DHT_READY_BIT    (1 << 0)
-#define IR_READY_BIT     (1 << 1)
-#define LDR_READY_BIT    (1 << 2)
-#define MQ2_READY_BIT    (1 << 3)
-#define SONAR_READY_BIT  (1 << 4)
+#define LDR_READY_BIT    (1 << 1)
+#define MQ2_READY_BIT    (1 << 2)
+#define SONAR_READY_BIT  (1 << 3)
 
 // Protótipos da função
 void dhtTask(void *pvParameters);
-void irTask(void *pvParameters);
 void ldrTask(void *pvParameters);
 void mq2Task(void *pvParameters);
 void sonarTask(void *pvParameters);
-void httpTask(void *pvParameters);
+void sendDataToSTA_ESP(void *pvParameters);
 
 // Estrutura de dados compartilhados
 typedef struct {
@@ -38,9 +37,17 @@ typedef struct {
   float humidity;
   int luminosity;
   int gas;
-  int ir_status;
   float distance;
 } SensorData;
+
+uint8_t broadcastAddress[] = {0x24, 0x62, 0xab, 0xca, 0x7b, 0x88};
+esp_now_peer_info_t peerInfo;
+
+// callback when data is sent
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
 
 // Objetos globais
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -48,29 +55,37 @@ SemaphoreHandle_t mutex;
 EventGroupHandle_t eventGroup;
 SensorData sharedData;
 
-// Configurações de Wi-Fi
-const char* ssid = "SUA_REDE_WIFI";
-const char* password = "SUA_SENHA_WIFI";
-
-// Endereço do servidor local
-const char* serverUrl = "http://192.168.1.100:5000/data"; // Substitua pelo IP e porta do seu servidor
-
 void setup() {
   Serial.begin(115200);
   
   // Inicialização dos sensores
   dht.begin();
-  pinMode(IR_PIN, INPUT);
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
+  pinMode(LDR_PIN, INPUT);
+  pinMode(MQ2_PIN, INPUT);
 
-  // Conectar ao Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Conectando ao Wi-Fi...");
+  // Set device as a Wi-Fi Station
+  WiFi.mode(WIFI_STA);
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
   }
-  Serial.println("Conectado ao Wi-Fi");
+
+  esp_now_register_send_cb(OnDataSent);
+  
+  // Register peer
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+    return;
+  }
 
   // Criação de recursos FreeRTOS
   mutex = xSemaphoreCreateMutex();
@@ -78,11 +93,10 @@ void setup() {
 
   // Criação de tasks
   xTaskCreatePinnedToCore(dhtTask, "DHT", 2048, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(irTask, "IR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(ldrTask, "LDR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(mq2Task, "MQ2", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(sonarTask, "Sonar", 2048, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(httpTask, "HTTP", 4096, NULL, 2, NULL, 1);
+  xTaskCreatePinnedToCore(sendDataToSTA_ESP, "HTTP", 4096, NULL, 2, NULL, 1);
 }
 
 void loop() {
@@ -101,18 +115,6 @@ void dhtTask(void *pvParameters) {
   }
 }
 
-void irTask(void *pvParameters) {
-  while(1) {
-    int status = digitalRead(IR_PIN);
-    if (xSemaphoreTake(mutex, portMAX_DELAY)) {
-      sharedData.ir_status = status;
-      xSemaphoreGive(mutex);
-      
-      xEventGroupSetBits(eventGroup, IR_READY_BIT);
-    }
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
-}
 
 void ldrTask(void *pvParameters) {
   while(1) {
@@ -161,33 +163,24 @@ void sonarTask(void *pvParameters) {
   }
 }
 
-void httpTask(void *pvParameters) {
-  const EventBits_t allBits = DHT_READY_BIT | IR_READY_BIT | LDR_READY_BIT | MQ2_READY_BIT | SONAR_READY_BIT;
+void sendDataToSTA_ESP(void *pvParameters) {
+  const EventBits_t allBits = DHT_READY_BIT | LDR_READY_BIT | MQ2_READY_BIT | SONAR_READY_BIT;
   
   while(1) {
     xEventGroupWaitBits(eventGroup, allBits, pdTRUE, pdTRUE, portMAX_DELAY);
 
     if (xSemaphoreTake(mutex, portMAX_DELAY)) {
-      String jsonData = "{\"Temperatura\":" + String(sharedData.temperature) + 
-                        ",\"Humidade\":" + String(sharedData.humidity) + 
-                        ",\"Luminosidade\":" + String(sharedData.luminosity) + 
-                        ",\"Gás\":" + String(sharedData.gas) + 
-                        ",\"Status IR\":" + String(sharedData.ir_status) + 
-                        ",\"Distância\":" + String(sharedData.distance) + "}";
+      Serial.printf("{\"temperature\":%.1f, \"humidity\":%.1f, \"luminosity\":%d, \"gas\":%d, \"distance\":%.1f}\n", sharedData.temperature, sharedData.humidity, sharedData.luminosity, sharedData.gas, sharedData.distance);
 
-      HTTPClient http;
-      http.begin(serverUrl);
-      http.addHeader("Content-Type", "application/json");
+      // Send message via ESP-NOW
+      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &sharedData, sizeof(sharedData));
       
-      int httpResponseCode = http.POST(jsonData);
-      if (httpResponseCode > 0) {
-        Serial.println("Dados enviados com sucesso!");
-        Serial.println("Resposta do servidor: " + http.getString());
-      } else {
-        Serial.println("Erro no envio: " + String(httpResponseCode));
+      if (result == ESP_OK) {
+        Serial.println("Sent with success");
       }
-      http.end();
-      
+      else {
+        Serial.println("Error sending the data");
+      }
       xSemaphoreGive(mutex);
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
