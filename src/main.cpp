@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <DHT.h>
-#include <esp_now.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -25,13 +25,12 @@
 #define SONAR_READY_BIT  (1 << 4)
 
 // Protótipos da função
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void dhtTask(void *pvParameters);
 void irTask(void *pvParameters);
 void ldrTask(void *pvParameters);
 void mq2Task(void *pvParameters);
 void sonarTask(void *pvParameters);
-void espnowTask(void *pvParameters);
+void httpTask(void *pvParameters);
 
 // Estrutura de dados compartilhados
 typedef struct {
@@ -49,8 +48,12 @@ SemaphoreHandle_t mutex;
 EventGroupHandle_t eventGroup;
 SensorData sharedData;
 
-// Endereço MAC do receptor ESP-NOW
-uint8_t receiverMac[] = {0x24, 0x62, 0xAB, 0xCA, 0x7B, 0x88};
+// Configurações de Wi-Fi
+const char* ssid = "SUA_REDE_WIFI";
+const char* password = "SUA_SENHA_WIFI";
+
+// Endereço do servidor local
+const char* serverUrl = "http://192.168.1.100:5000/data"; // Substitua pelo IP e porta do seu servidor
 
 void setup() {
   Serial.begin(115200);
@@ -61,17 +64,13 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
-  // Inicialização do ESP-NOW
-  WiFi.mode(WIFI_STA);
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Erro ESP-NOW");
-    return;
+  // Conectar ao Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Conectando ao Wi-Fi...");
   }
-  esp_now_peer_info_t peerInfo;
-  memcpy(peerInfo.peer_addr, receiverMac, 6);
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
-  esp_now_add_peer(&peerInfo);
+  Serial.println("Conectado ao Wi-Fi");
 
   // Criação de recursos FreeRTOS
   mutex = xSemaphoreCreateMutex();
@@ -83,15 +82,10 @@ void setup() {
   xTaskCreatePinnedToCore(ldrTask, "LDR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(mq2Task, "MQ2", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(sonarTask, "Sonar", 2048, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(espnowTask, "ESP-NOW", 4096, NULL, 2, NULL, 1);
+  xTaskCreatePinnedToCore(httpTask, "HTTP", 4096, NULL, 2, NULL, 1);
 }
 
 void loop() {
-}
-
-// Callback de envio ESP-NOW
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Envio OK" : "Falha");
 }
 
 void dhtTask(void *pvParameters) {
@@ -167,30 +161,33 @@ void sonarTask(void *pvParameters) {
   }
 }
 
-void espnowTask(void *pvParameters) {
+void httpTask(void *pvParameters) {
   const EventBits_t allBits = DHT_READY_BIT | IR_READY_BIT | LDR_READY_BIT | MQ2_READY_BIT | SONAR_READY_BIT;
   
   while(1) {
     xEventGroupWaitBits(eventGroup, allBits, pdTRUE, pdTRUE, portMAX_DELAY);
 
     if (xSemaphoreTake(mutex, portMAX_DELAY)) {
-      // Simula o envio imprimindo os dados no Serial
-      Serial.println("=== Simulando envio de dados via ESP-NOW ===");
-      Serial.print("Temperatura: "); Serial.println(sharedData.temperature);
-      Serial.print("Umidade: "); Serial.println(sharedData.humidity);
-      Serial.print("Luminosidade: "); Serial.println(sharedData.luminosity);
-      Serial.print("Gás: "); Serial.println(sharedData.gas);
-      Serial.print("IR Status: "); Serial.println(sharedData.ir_status);
-      Serial.print("Distância: "); Serial.println(sharedData.distance);
-      Serial.println("============================================");
+      String jsonData = "{\"Temperatura\":" + String(sharedData.temperature) + 
+                        ",\"Humidade\":" + String(sharedData.humidity) + 
+                        ",\"Luminosidade\":" + String(sharedData.luminosity) + 
+                        ",\"Gás\":" + String(sharedData.gas) + 
+                        ",\"Status IR\":" + String(sharedData.ir_status) + 
+                        ",\"Distância\":" + String(sharedData.distance) + "}";
 
-      // Mantém o código original para quando a conectividade estiver disponível
-      esp_now_register_send_cb(OnDataSent);
-      esp_err_t result = esp_now_send(receiverMac, (uint8_t *) &sharedData, sizeof(sharedData));
+      HTTPClient http;
+      http.begin(serverUrl);
+      http.addHeader("Content-Type", "application/json");
       
-      if (result != ESP_OK) {
-        Serial.println("Erro no envio");
+      int httpResponseCode = http.POST(jsonData);
+      if (httpResponseCode > 0) {
+        Serial.println("Dados enviados com sucesso!");
+        Serial.println("Resposta do servidor: " + http.getString());
+      } else {
+        Serial.println("Erro no envio: " + String(httpResponseCode));
       }
+      http.end();
+      
       xSemaphoreGive(mutex);
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
