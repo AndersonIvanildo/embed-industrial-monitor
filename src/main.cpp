@@ -9,24 +9,24 @@
 #include <freertos/event_groups.h>
 
 // Definições de hardware
-#define DHT_PIN          4
-#define IR_PIN           5
-#define LDR_PIN          34
-#define MQ2_PIN          35
-#define TRIG_PIN         18
-#define ECHO_PIN         19
+#define DHT_PIN          33
+//#define IR_PIN           5
+#define LDR_PIN          32
+#define MQ2_PIN          21
+#define TRIG_PIN         22
+#define ECHO_PIN         23
 #define DHT_TYPE         DHT11
 
 // Event Group bits
 #define DHT_READY_BIT    (1 << 0)
-#define IR_READY_BIT     (1 << 1)
-#define LDR_READY_BIT    (1 << 2)
-#define MQ2_READY_BIT    (1 << 3)
-#define SONAR_READY_BIT  (1 << 4)
+//#define IR_READY_BIT     (1 << 1)
+#define LDR_READY_BIT    (1 << 1)
+#define MQ2_READY_BIT    (1 << 2)
+#define SONAR_READY_BIT  (1 << 3)
 
 // Protótipos da função
 void dhtTask(void *pvParameters);
-void irTask(void *pvParameters);
+//void irTask(void *pvParameters);
 void ldrTask(void *pvParameters);
 void mq2Task(void *pvParameters);
 void sonarTask(void *pvParameters);
@@ -38,7 +38,7 @@ typedef struct {
   float humidity;
   int luminosity;
   int gas;
-  int ir_status;
+  //int ir_status;
   float distance;
 } SensorData;
 
@@ -60,7 +60,7 @@ void setup() {
   
   // Inicialização dos sensores
   dht.begin();
-  pinMode(IR_PIN, INPUT);
+  //pinMode(IR_PIN, INPUT);
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
@@ -78,7 +78,7 @@ void setup() {
 
   // Criação de tasks
   xTaskCreatePinnedToCore(dhtTask, "DHT", 2048, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(irTask, "IR", 1024, NULL, 1, NULL, 0);
+  //xTaskCreatePinnedToCore(irTask, "IR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(ldrTask, "LDR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(mq2Task, "MQ2", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(sonarTask, "Sonar", 2048, NULL, 1, NULL, 0);
@@ -101,18 +101,18 @@ void dhtTask(void *pvParameters) {
   }
 }
 
-void irTask(void *pvParameters) {
-  while(1) {
-    int status = digitalRead(IR_PIN);
-    if (xSemaphoreTake(mutex, portMAX_DELAY)) {
-      sharedData.ir_status = status;
-      xSemaphoreGive(mutex);
+// void irTask(void *pvParameters) {
+//   while(1) {
+//     int status = digitalRead(IR_PIN);
+//     if (xSemaphoreTake(mutex, portMAX_DELAY)) {
+//       sharedData.ir_status = status;
+//       xSemaphoreGive(mutex);
       
-      xEventGroupSetBits(eventGroup, IR_READY_BIT);
-    }
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
-}
+//       xEventGroupSetBits(eventGroup, IR_READY_BIT);
+//     }
+//     vTaskDelay(pdMS_TO_TICKS(100));
+//   }
+// }
 
 void ldrTask(void *pvParameters) {
   while(1) {
@@ -162,7 +162,7 @@ void sonarTask(void *pvParameters) {
 }
 
 void httpTask(void *pvParameters) {
-  const EventBits_t allBits = DHT_READY_BIT | IR_READY_BIT | LDR_READY_BIT | MQ2_READY_BIT | SONAR_READY_BIT;
+  const EventBits_t allBits = DHT_READY_BIT | LDR_READY_BIT | MQ2_READY_BIT | SONAR_READY_BIT;
   
   while(1) {
     xEventGroupWaitBits(eventGroup, allBits, pdTRUE, pdTRUE, portMAX_DELAY);
@@ -171,8 +171,7 @@ void httpTask(void *pvParameters) {
       String jsonData = "{\"Temperatura\":" + String(sharedData.temperature) + 
                         ",\"Humidade\":" + String(sharedData.humidity) + 
                         ",\"Luminosidade\":" + String(sharedData.luminosity) + 
-                        ",\"Gás\":" + String(sharedData.gas) + 
-                        ",\"Status IR\":" + String(sharedData.ir_status) + 
+                        ",\"Gás\":" + String(sharedData.gas) +
                         ",\"Distância\":" + String(sharedData.distance) + "}";
 
       HTTPClient http;
