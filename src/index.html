@@ -58,26 +58,12 @@
             margin-right: 10px;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/heatmap.js"></script>
 </head>
 <body>
     <div class="main-content">
         <h1>Mapeamento do Robô</h1>
-        <div class="map-container">
-            <canvas id="heatmap"></canvas>
-        </div>
-        <div class="controls">
-            <label>
-                <input type="radio" name="sensor" value="temperature" checked> Temperatura
-            </label>
-            <label>
-                <input type="radio" name="sensor" value="humidity"> Umidade
-            </label>
-            <label>
-                <input type="radio" name="sensor" value="gas"> Gás
-            </label>
-            <label>
-                <input type="radio" name="sensor" value="luminosity"> Luminosidade
-            </label>
+        <div class="map-container" id="map-container">
         </div>
     </div>
 
@@ -101,6 +87,27 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        const ws = new WebSocket('ws://localhost:5000');
+
+        const heatmapInstance = h337.create({
+            container: document.getElementById('map-container'), 
+            radius: 50,
+            maxOpacity: 0.6,
+        });
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const distance = data.Distância;
+
+            const intensity = Math.max(0, 100 - distance);
+
+            heatmapInstance.addData({
+                x: Math.random() * 500, 
+                y: Math.random() * 500, 
+                value: intensity,
+            });
+        };
+    </script>
 </body>
 </html>
