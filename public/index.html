@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoramento do Robô</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            order: 2; 
+        }
+        .sidebar h1 {
+            margin-top: 0;
+        }
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            background-color: #ecf0f1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .sensor-value {
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .sensor-value label {
+            font-weight: bold;
+            font-size: 25px;
+        }
+        .sensor-value span {
+            display: block;
+            margin-top: 5px;
+            font-size: 22px;
+        }
+        .map-container {
+            width: 80%;
+            height: 400px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            position: relative;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .controls label {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h1>Monitoramento</h1>
+        <div class="sensor-value">
+            <label>Temperatura:</label>
+            <span id="temperature">--</span> °C
+        </div>
+        <div class="sensor-value">
+            <label>Umidade:</label>
+            <span id="humidity">--</span> %
+        </div>
+        <div class="sensor-value">
+            <label>Gás:</label>
+            <span id="gas">--</span>
+        </div>
+        <div class="sensor-value">
+            <label>Luminosidade:</label>
+            <span id="luminosity">--</span>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <h1>Dados do Robô</h1>
+        <div class="map-container">
+            <!-- Aqui pode ser adicionado o mapa ou outras representações -->
+            <canvas id="heatmap"></canvas>
+        </div>
+        <div class="controls">
+            <label>
+                <input type="radio" name="sensor" value="temperature" checked> Temperatura
+            </label>
+            <label>
+                <input type="radio" name="sensor" value="humidity"> Umidade
+            </label>
+            <label>
+                <input type="radio" name="sensor" value="gas"> Gás
+            </label>
+            <label>
+                <input type="radio" name="sensor" value="luminosity"> Luminosidade
+            </label>
+        </div>
+    </div>
+</body>
+</html>
