@@ -19,7 +19,6 @@
 
 // Event Group bits
 #define DHT_READY_BIT    (1 << 0)
-//#define IR_READY_BIT     (1 << 1)
 #define LDR_READY_BIT    (1 << 1)
 #define MQ2_READY_BIT    (1 << 2)
 #define SONAR_READY_BIT  (1 << 3)
@@ -38,7 +37,6 @@ typedef struct {
   float humidity;
   int luminosity;
   int gas;
-  //int ir_status;
   float distance;
 } SensorData;
 
@@ -100,19 +98,6 @@ void dhtTask(void *pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(2000));
   }
 }
-
-// void irTask(void *pvParameters) {
-//   while(1) {
-//     int status = digitalRead(IR_PIN);
-//     if (xSemaphoreTake(mutex, portMAX_DELAY)) {
-//       sharedData.ir_status = status;
-//       xSemaphoreGive(mutex);
-      
-//       xEventGroupSetBits(eventGroup, IR_READY_BIT);
-//     }
-//     vTaskDelay(pdMS_TO_TICKS(100));
-//   }
-// }
 
 void ldrTask(void *pvParameters) {
   while(1) {
