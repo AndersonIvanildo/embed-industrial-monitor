@@ -34,7 +34,7 @@ app.post('/data', (req, res) => {
 
 // Rota para servir o front-end
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/index.html');
+    res.sendFile(__dirname + 'src/web_service_project/front-end/index.html');
 });
 
 // Servir arquivos estáticos (CSS, JS, etc.)
