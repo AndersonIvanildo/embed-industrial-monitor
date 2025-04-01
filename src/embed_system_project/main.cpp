@@ -24,7 +24,6 @@
 
 // Protótipos da função
 void dhtTask(void *pvParameters);
-//void irTask(void *pvParameters);
 void ldrTask(void *pvParameters);
 void mq2Task(void *pvParameters);
 void sonarTask(void *pvParameters);
@@ -45,13 +44,6 @@ SemaphoreHandle_t mutex;
 EventGroupHandle_t eventGroup;
 SensorData sharedData;
 
-// Configurações de Wi-Fi
-const char* ssid = "SUA_REDE_WIFI";
-const char* password = "SUA_SENHA_WIFI";
-
-// Endereço do servidor local
-const char* serverUrl = "http://192.168.1.100:5000/data"; // Substitua pelo IP e porta do seu servidor
-
 void setup() {
   Serial.begin(115200);
   
@@ -61,21 +53,12 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
 
-  // Conectar ao Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Conectando ao Wi-Fi...");
-  }
-  Serial.println("Conectado ao Wi-Fi");
-
   // Criação de recursos FreeRTOS
   mutex = xSemaphoreCreateMutex();
   eventGroup = xEventGroupCreate();
 
   // Criação de tasks
   xTaskCreatePinnedToCore(dhtTask, "DHT", 2048, NULL, 1, NULL, 0);
-  //xTaskCreatePinnedToCore(irTask, "IR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(ldrTask, "LDR", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(mq2Task, "MQ2", 1024, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(sonarTask, "Sonar", 2048, NULL, 1, NULL, 0);
@@ -157,20 +140,6 @@ void httpTask(void *pvParameters) {
                         ",\"Luminosidade\":" + String(sharedData.luminosity) + 
                         ",\"Gás\":" + String(sharedData.gas) +
                         ",\"Distância\":" + String(sharedData.distance) + "}";
-
-      HTTPClient http;
-      http.begin(serverUrl);
-      http.addHeader("Content-Type", "application/json");
-      
-      int httpResponseCode = http.POST(jsonData);
-      if (httpResponseCode > 0) {
-        Serial.println("Dados enviados com sucesso!");
-        Serial.println("Resposta do servidor: " + http.getString());
-      } else {
-        Serial.println("Erro no envio: " + String(httpResponseCode));
-      }
-      http.end();
-      
       xSemaphoreGive(mutex);
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
