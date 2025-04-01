@@ -10,7 +10,6 @@
 
 // Definições de hardware
 #define DHT_PIN          33
-//#define IR_PIN           5
 #define LDR_PIN          32
 #define MQ2_PIN          21
 #define TRIG_PIN         22
