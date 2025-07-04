@@ -103,7 +103,7 @@ void setup() {
 
   // Teste inicial dos motores
   moveForward();
-  vTaskDelay(pdMS_TO_TICKS(2000));
+  delay(2000);
   stopMotors();
 
   // Criação de tasks
